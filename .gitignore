@@ -22,11 +22,20 @@ env/
 *.env
 !.env.example
 
-# --- ChromaDB Persistence ---
+# --- ChromaDB Persistence (ephemeral on Railway — rebuilt on each start) ---
 data/chroma_db/
+backend/data/chroma_db/
 
 # --- Raw Scraped Data ---
-data/raw/
+# Intentionally tracked in Git so Railway has fallback data on cold starts.
+# The daily GitHub Actions workflow keeps these files up to date.
+# Only ignore log files that may appear alongside the JSON.
+backend/data/raw/*.log
+
+# --- Frontend env files ---
+# .env.local is for local dev overrides — never commit secrets.
+stitch_hdfc_mutual_fund_assistant/.env.local
+stitch_hdfc_mutual_fund_assistant/.env.*.local
 
 # --- IDE / Editor ---
 .vscode/

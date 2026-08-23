@@ -179,14 +179,18 @@ def normalize_scheme(search_id: str, raw: dict) -> dict:
     }
 
 
-def scrape_all_schemes(output_dir: str = "data/raw") -> list[dict]:
+def scrape_all_schemes(output_dir: str = "backend/data/raw") -> list[dict]:
     """Scrape all target schemes and save as individual JSON files.
+
+    If the Groww API is unavailable for a scheme (e.g. during a Railway cold
+    start or network outage), the scraper falls back to the last committed JSON
+    file in *output_dir* rather than skipping the scheme entirely.
 
     Args:
         output_dir: Directory to write per-scheme JSON files.
 
     Returns:
-        List of normalized scheme dicts.
+        List of normalized scheme dicts (live + fallback combined).
     """
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
@@ -196,14 +200,32 @@ def scrape_all_schemes(output_dir: str = "data/raw") -> list[dict]:
         logger.info("Scraping: %s", meta["display_name"])
 
         raw = fetch_scheme_data(search_id)
+
         if raw is None:
-            logger.warning("Skipping %s — fetch failed", search_id)
+            # --- Fallback: load last committed JSON if available ---
+            fallback_path = out_path / f"{search_id}.json"
+            if fallback_path.exists():
+                try:
+                    with open(fallback_path, encoding="utf-8") as f:
+                        normalized = json.load(f)
+                    logger.warning(
+                        "Groww API unavailable — using cached fallback data for %s",
+                        search_id,
+                    )
+                    results.append(normalized)
+                except Exception as e:
+                    logger.error("Failed to load fallback JSON for %s: %s", search_id, e)
+            else:
+                logger.warning(
+                    "Skipping %s — fetch failed and no fallback data available",
+                    search_id,
+                )
             continue
 
         normalized = normalize_scheme(search_id, raw)
         results.append(normalized)
 
-        # Write per-scheme JSON
+        # Write per-scheme JSON (also updates the fallback for next time)
         filename = f"{search_id}.json"
         filepath = out_path / filename
         with open(filepath, "w", encoding="utf-8") as f:
