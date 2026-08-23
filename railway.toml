@@ -1,6 +1,5 @@
 [build]
 builder = "NIXPACKS"
-nixpacksPlan = { phases = { setup = { nixPkgs = ["python311", "gcc"] }, install = { cmds = ["python -m venv /opt/venv", ". /opt/venv/bin/activate", "pip install -r backend/requirements.txt"] } } }
 
 [deploy]
 startCommand = "bash backend/start.sh"
