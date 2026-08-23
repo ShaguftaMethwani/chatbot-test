@@ -1,0 +1,17 @@
+{
+  "scheme_name": "HDFC Small Cap Fund",
+  "category": "Small Cap",
+  "expense_ratio": "0.75%",
+  "exit_load": "Exit load of 1% if redeemed within 1 year",
+  "min_sip_amount": "₹100.00",
+  "min_lumpsum": "₹100.00",
+  "lock_in_period": "Nil",
+  "riskometer": "Very High",
+  "benchmark": "BSE 250 SmallCap TRI",
+  "fund_manager": "Dhruv Muchhal",
+  "aum": "₹41,679.00",
+  "nav": "₹161.457",
+  "nav_date": "21-Aug-2026",
+  "source_url": "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth",
+  "scraped_date": "2026-08-23"
+}

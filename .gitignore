@@ -1,0 +1,48 @@
+# ──────────────────────────────────────────────
+# Mutual Fund FAQ Assistant — .gitignore
+# ──────────────────────────────────────────────
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environment ---
+venv/
+.venv/
+env/
+
+# --- Environment / Secrets ---
+.env
+*.env
+!.env.example
+
+# --- ChromaDB Persistence ---
+data/chroma_db/
+
+# --- Raw Scraped Data ---
+data/raw/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# --- Testing ---
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# --- Misc ---
+*.log
+*.bak
+*.tmp
