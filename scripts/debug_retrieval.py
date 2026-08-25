@@ -9,7 +9,7 @@ from backend.vectorstore.store import get_store
 from backend.core.query import preprocess_query
 
 store = get_store()
-query = "Tell me about the ELSS Tax Saver fund."
+query = sys.argv[1] if len(sys.argv) > 1 else "Tell me about the ELSS Tax Saver fund."
 processed = preprocess_query(query)
 
 results = store.query([processed])

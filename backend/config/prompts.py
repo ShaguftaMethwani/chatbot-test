@@ -30,9 +30,7 @@ financial advisor.
 
 Learn more: https://www.amfiindia.com/investor-corner/knowledge-center"""
 
-REFUSAL_OUT_OF_SCOPE = """I can only answer factual questions about the following HDFC
-mutual fund schemes: Mid-Cap Opportunities, Small Cap, Gold ETF Fund of Fund,
-Top 100 (Large Cap), and ELSS Tax Saver. Please try a question about one of these schemes."""
+REFUSAL_OUT_OF_SCOPE = """I can only answer factual questions about general mutual fund concepts (like taxation, NAV, CAS, and statements) and the following HDFC mutual fund schemes: Mid-Cap Opportunities, Small Cap, Gold ETF Fund of Fund, Top 100 (Large Cap), and ELSS Tax Saver. Please try a question within this scope."""
 
 REFUSAL_PII = """For your security, I cannot process messages containing personal
 information like PAN, Aadhaar, phone numbers, or email addresses. Please remove
