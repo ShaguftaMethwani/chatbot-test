@@ -16,6 +16,20 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# ── Target Help Pages ──────────────────────────────────────────────────
+HELP_URLS = {
+    "help-download-statement": "https://groww.in/help/mutual-funds/statements/how-to-download-mutual-fund-statement",
+    "help-download-capital-gains": "https://groww.in/help/mutual-funds/taxation/how-to-download-capital-gains-statement",
+    "help-elss-tax-proof": "https://groww.in/help/mutual-funds/taxation/elss-tax-saving-investment-proof",
+    "help-tax-calculation": "https://groww.in/help/mutual-funds/taxation/how-is-tax-calculated-on-mutual-funds",
+    "help-cas-statement": "https://groww.in/help/mutual-funds/statements/what-is-a-consolidated-account-statement-cas",
+    "help-expense-ratio": "https://groww.in/help/mutual-funds/general/what-is-expense-ratio",
+    "help-exit-load": "https://groww.in/help/mutual-funds/general/what-is-exit-load",
+    "help-nav": "https://groww.in/help/mutual-funds/general/what-is-nav-net-asset-value",
+    "help-riskometer": "https://groww.in/help/mutual-funds/general/what-is-a-riskometer",
+    "help-min-sip": "https://groww.in/help/mutual-funds/sips/what-is-the-minimum-sip-amount"
+}
+
 # ── Target Schemes ───────────────────────────────────────────────────
 SCHEME_URLS = {
     "hdfc-mid-cap-fund-direct-growth": {
@@ -233,4 +247,92 @@ def scrape_all_schemes(output_dir: str = "backend/data/raw") -> list[dict]:
         logger.info("  → Saved %s", filepath)
 
     logger.info("Scraped %d / %d schemes successfully", len(results), len(SCHEME_URLS))
+    return results
+
+
+def scrape_help_pages(output_dir: str = "backend/data/raw") -> list[dict]:
+    """Scrape Mutual Fund educational/help articles from Groww.
+    
+    Extracts text using BeautifulSoup. Falls back to cached JSON if network fails.
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        logger.error("beautifulsoup4 is required for scraping help pages. Install it with `pip install beautifulsoup4`")
+        return []
+
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    }
+
+    results = []
+    for search_id, url in HELP_URLS.items():
+        logger.info("Scraping Help Article: %s", search_id)
+        
+        fallback_path = out_path / f"{search_id}.json"
+        
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            
+            soup = BeautifulSoup(resp.text, "html.parser")
+            
+            # The title is usually in an h1
+            title_el = soup.find("h1")
+            title = title_el.get_text(strip=True) if title_el else search_id.replace("help-", "").replace("-", " ").title()
+            
+            # Extract paragraphs and list items from the main content area
+            # We target the main layout to avoid header/footer noise if possible, or just grab all p/li
+            content_div = soup.find("div", class_="qap761TextAnswer") or soup.find("div", class_="answerWrapper") or soup.find("main")
+            
+            if content_div:
+                elements = content_div.find_all(['p', 'li', 'h2', 'h3'])
+            else:
+                # Fallback: grab all standard text elements
+                elements = soup.find_all(['p', 'li', 'h2', 'h3'])
+                
+            text_blocks = [el.get_text(strip=True) for el in elements if el.get_text(strip=True)]
+            
+            # Filter out obvious UI junk like "Was the answer helpful?" or footer links
+            clean_blocks = [
+                text for text in text_blocks 
+                if not text.startswith("Was the answer helpful") 
+                and not text.startswith("Download the App")
+                and len(text) > 20  # Ignore tiny UI buttons
+            ]
+            
+            article_text = "\n\n".join(clean_blocks)
+            
+            normalized = {
+                "type": "help_article",
+                "id": search_id,
+                "title": title,
+                "content": article_text,
+                "source_url": url,
+                "scraped_date": date.today().isoformat(),
+            }
+            
+            # Save to disk
+            with open(fallback_path, "w", encoding="utf-8") as f:
+                json.dump(normalized, f, indent=2, ensure_ascii=False)
+            logger.info("  → Saved %s", fallback_path)
+            results.append(normalized)
+            
+        except Exception as e:
+            logger.error("Failed to scrape %s: %s", url, e)
+            if fallback_path.exists():
+                try:
+                    with open(fallback_path, encoding="utf-8") as f:
+                        results.append(json.load(f))
+                    logger.warning("  → Using cached fallback data for %s", search_id)
+                except Exception as inner_e:
+                    logger.error("  → Failed to load fallback JSON: %s", inner_e)
+            else:
+                logger.warning("  → Skipping %s — no fallback available", search_id)
+                
+    logger.info("Scraped %d / %d help pages successfully", len(results), len(HELP_URLS))
     return results

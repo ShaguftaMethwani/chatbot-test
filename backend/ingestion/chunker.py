@@ -219,17 +219,47 @@ def chunk_scheme(scheme: dict) -> list[dict]:
     return chunks
 
 
-def chunk_all_schemes(schemes: list[dict]) -> list[dict]:
-    """Chunk all normalized scheme dicts.
+def chunk_help_article(article: dict) -> list[dict]:
+    """Chunk a help article into smaller semantic paragraphs."""
+    title = article["title"]
+    url = article["source_url"]
+    date = article["scraped_date"]
+    content = article["content"]
+    
+    chunks = []
+    # Split by double newline to get logical paragraphs
+    paragraphs = [p.strip() for p in content.split("\n\n") if len(p.strip()) > 30]
+    
+    # If a paragraph is too long, the embedding model handles truncation, 
+    # but breaking by paragraph is usually safe enough for help articles.
+    for i, para in enumerate(paragraphs):
+        # Prefix the chunk with the title for context
+        chunk_text = f"{title}\n{para}"
+        chunks.append(_make_chunk(
+            chunk_text,
+            title, "help_content", url, date,
+        ))
+        
+    logger.debug("Created %d chunks for help article: %s", len(chunks), title)
+    return chunks
+
+
+def chunk_all_documents(docs: list[dict]) -> list[dict]:
+    """Chunk all normalized documents (schemes + help articles).
 
     Args:
-        schemes: List of normalized scheme dicts.
+        docs: List of normalized dicts.
 
     Returns:
-        Flat list of all chunks across all schemes.
+        Flat list of all chunks across all documents.
     """
     all_chunks = []
-    for scheme in schemes:
-        all_chunks.extend(chunk_scheme(scheme))
-    logger.info("Total chunks created: %d (from %d schemes)", len(all_chunks), len(schemes))
+    for doc in docs:
+        if doc.get("type") == "help_article":
+            all_chunks.extend(chunk_help_article(doc))
+        else:
+            # Fallback for existing scheme format
+            all_chunks.extend(chunk_scheme(doc))
+            
+    logger.info("Total chunks created: %d (from %d documents)", len(all_chunks), len(docs))
     return all_chunks

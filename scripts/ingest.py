@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # Load env file from backend/.env if running from root
 load_dotenv("backend/.env")
 
-from backend.ingestion.scraper import scrape_all_schemes
-from backend.ingestion.chunker import chunk_all_schemes
+from backend.ingestion.scraper import scrape_all_schemes, scrape_help_pages
+from backend.ingestion.chunker import chunk_all_documents
 from backend.ingestion.embedder import embed_and_store
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -28,14 +28,16 @@ def run_pipeline():
     # 1. Scrape
     logger.info("--- Step 1: Scrape ---")
     schemes = scrape_all_schemes(output_dir="backend/data/raw")
+    help_articles = scrape_help_pages(output_dir="backend/data/raw")
     
-    if not schemes:
-        logger.error("No schemes scraped. Exiting.")
+    all_docs = schemes + help_articles
+    if not all_docs:
+        logger.error("No data scraped (and no fallbacks). Aborting.")
         sys.exit(1)
         
     # 2. Chunk
     logger.info("--- Step 2: Chunk ---")
-    chunks = chunk_all_schemes(schemes)
+    chunks = chunk_all_documents(all_docs)
     
     if not chunks:
         logger.error("No chunks generated. Exiting.")

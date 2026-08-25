@@ -4,13 +4,13 @@ A **facts-only** chatbot that answers factual questions about HDFC mutual fund s
 
 ---
 
-## ✨ Features
+## ✨ Scope & Features
 
-- **Facts-Only Responses** — Concise, source-cited answers with no opinions or recommendations
-- **5 HDFC Schemes Covered** — Mid-Cap Opportunities, Small Cap, Gold ETF FoF, Top 100 (Large Cap), ELSS Tax Saver
-- **Guardrails** — Detects and refuses advisory queries, PII, and prompt injection attempts
-- **Source Transparency** — Every response includes a citation link and "Last updated" date
-- **Modern Chat UI** — Dark-themed glassmorphism interface with example questions and typing indicators
+- **Facts-Only Responses** — Concise, source-cited answers with no opinions or recommendations.
+- **Corpus (15 URLs)** — Scrapes 5 HDFC schemes (Mid-Cap Opportunities, Small Cap, Gold ETF FoF, Top 100, ELSS Tax Saver) and 10 Groww Mutual Fund Help Center articles (covering taxation, statements, and core concepts). See `sources.csv`.
+- **Guardrails** — Detects and refuses advisory queries, PII, and prompt injection attempts.
+- **Source Transparency** — Every response includes a citation link and "Last updated" date.
+- **Modern Chat UI** — Dark-themed glassmorphism interface with example questions and a strict disclaimer snippet.
 
 ---
 
@@ -124,10 +124,20 @@ Open `frontend/index.html` with a local server (e.g., VS Code Live Server on por
 
 ---
 
-## ⚠️ Disclaimer
+## ⚠️ Known Limits
 
-This chatbot provides **factual information only** sourced from public fund documents. It does **not** provide investment advice, recommendations, or portfolio suggestions. For investment guidance, consult a [SEBI-registered financial advisor](https://www.amfiindia.com/investor-corner/knowledge-center).
+- **Limited Scope:** The bot only knows about 5 HDFC schemes. Asking about a Nippon India or Tata fund will result in a graceful fallback.
+- **No Predictive Capabilities:** The bot cannot calculate expected returns, compare historical performance to future projections, or advise on portfolio allocation.
+- **Static Ingestion:** The ChromaDB vector store is populated at container start time via scraping. Real-time intraday NAV updates are not continuously polled.
 
+---
+
+## ⚖️ UI Disclaimer Snippet
+
+The following facts-only disclaimer is permanently affixed to the bottom of the chat interface as per the project requirements:
+> *"Facts-only. No investment advice. Verify details with official AMC documents before investing."*
+
+Additionally, the assistant strictly refuses advisory queries and directs users to SEBI/AMFI.
 ---
 
 ## 📄 License
