@@ -1,7 +1,7 @@
 {
   "scheme_name": "HDFC Top 100 Fund",
   "category": "Large Cap",
-  "expense_ratio": "1.03%",
+  "expense_ratio": "1.02%",
   "exit_load": "Exit load of 1% if redeemed within 1 year",
   "min_sip_amount": "₹100.00",
   "min_lumpsum": "₹100.00",
@@ -10,8 +10,8 @@
   "benchmark": "NIFTY 100 TRI",
   "fund_manager": "Rahul Baijal",
   "aum": "₹401.98 Cr",
-  "nav": "₹1245.125",
-  "nav_date": "21-Aug-2026",
+  "nav": "₹1243.689",
+  "nav_date": "24-Aug-2026",
   "source_url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
-  "scraped_date": "2026-08-24"
+  "scraped_date": "2026-08-25"
 }

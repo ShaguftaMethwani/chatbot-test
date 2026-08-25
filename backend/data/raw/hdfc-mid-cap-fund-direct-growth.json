@@ -1,7 +1,7 @@
 {
   "scheme_name": "HDFC Mid-Cap Opportunities Fund",
   "category": "Mid-Cap",
-  "expense_ratio": "0.75%",
+  "expense_ratio": "0.74%",
   "exit_load": "Exit load of 1% if redeemed within 1 year.",
   "min_sip_amount": "₹100.00",
   "min_lumpsum": "₹100.00",
@@ -10,8 +10,8 @@
   "benchmark": "NIFTY Midcap 150 TRI",
   "fund_manager": "Chirag Setalvad",
   "aum": "₹1,051.43 Cr",
-  "nav": "₹236.588",
-  "nav_date": "21-Aug-2026",
+  "nav": "₹237.124",
+  "nav_date": "24-Aug-2026",
   "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
-  "scraped_date": "2026-08-24"
+  "scraped_date": "2026-08-25"
 }
