@@ -58,11 +58,33 @@ def _fallback_split(message: str) -> list[str]:
     return questions if questions else [message.strip()]
 
 
+def _likely_multi_question(message: str) -> bool:
+    """Heuristic check: does this message likely contain multiple questions?"""
+    lower = message.lower().strip()
+
+    # Multiple question marks → almost certainly multi-question
+    if lower.count("?") > 1:
+        return True
+
+    # Connectors that often link separate questions
+    multi_signals = [" also ", " and also ", " additionally ", " plus ", " as well as "]
+    for signal in multi_signals:
+        if signal in lower:
+            return True
+
+    # "compare" or "difference between" often imply splitting into per-item queries
+    if "compare" in lower or "difference between" in lower:
+        return True
+
+    return False
+
+
 def split_questions(message: str, client: Groq = None) -> list[str]:
     """Split a user message into individual sub-questions using the LLM.
 
-    Uses a fast Groq LLM call to semantically decompose the message.
-    Falls back to simple '?' splitting if the LLM call fails.
+    Uses a fast Groq LLM call to semantically decompose the message,
+    but ONLY when the message looks like it might contain multiple questions.
+    Single questions skip the LLM call entirely for speed.
 
     Args:
         message: The raw user message.
@@ -71,6 +93,11 @@ def split_questions(message: str, client: Groq = None) -> list[str]:
     Returns:
         A list of one or more sub-question strings.
     """
+    # Fast path: skip LLM if this is clearly a single question
+    if not _likely_multi_question(message):
+        logger.info("Single question detected — skipping LLM decomposition.")
+        return [message.strip()]
+
     settings = get_settings()
 
     if client is None:
