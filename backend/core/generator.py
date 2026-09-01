@@ -301,36 +301,72 @@ class ResponseGenerator:
                 stream=True,
             )
             
-            in_think_block = False
-            full_response = ""
+            is_thinking = False
+            buffer = ""
             
             for chunk in stream:
                 content = chunk.choices[0].delta.content
                 if content:
-                    full_response += content
+                    buffer += content
                     
-                    if "<think>" in full_response and not in_think_block:
-                        in_think_block = True
-                        # If content had text before think, we yield it
-                        idx = content.find("<think>")
-                        if idx > 0:
-                            yield f"data: {json.dumps({'type': 'chunk', 'text': content[:idx]})}\n\n"
+                    # Process buffer
+                    while len(buffer) > 0:
+                        if not is_thinking:
+                            # Look for <think>
+                            think_idx = buffer.find("<think>")
+                            if think_idx != -1:
+                                # Found <think>, yield everything before it
+                                pre_text = buffer[:think_idx]
+                                if pre_text:
+                                    yield f"data: {json.dumps({'type': 'chunk', 'text': pre_text})}\n\n"
+                                is_thinking = True
+                                buffer = buffer[think_idx + 7:] # Remove <think>
+                                continue
                             
-                    if in_think_block and "</think>" in full_response:
-                        in_think_block = False
-                        idx = content.find("</think>")
-                        if idx != -1:
-                            content = content[idx + 8:]
+                            # Check if we might be in the middle of writing <think>
+                            # Find the last '<'
+                            last_lt = buffer.rfind("<")
+                            if last_lt != -1:
+                                # See if the remainder could be a prefix of "<think>"
+                                remainder = buffer[last_lt:]
+                                if "<think>".startswith(remainder):
+                                    # Yield everything before the '<' and keep the rest in buffer
+                                    pre_text = buffer[:last_lt]
+                                    if pre_text:
+                                        yield f"data: {json.dumps({'type': 'chunk', 'text': pre_text})}\n\n"
+                                    buffer = remainder
+                                    break # Wait for more chunks
+                            
+                            # Safe to yield the whole buffer
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': buffer})}\n\n"
+                            buffer = ""
+                            break
+                        
                         else:
-                            content = "" # it was split across chunks, we just ignore this chunk
-
-                    # We are not in think block, or we just exited it
-                    # But be careful if `<think>` spans across chunks. A simpler regex buffering approach:
-                    # Actually, if we assume `<think>` and `</think>` are yielded cleanly or we just filter them out from the stream
-                    # Groq usually yields tokens quickly, `<think>` might come in as '<', 'think', '>'. 
-                    # Simpler approach: send everything, but buffer it. If the model is not a reasoning model it won't emit it.
-                    # llama-3.3-70b-versatile is not a reasoning model, so it shouldn't emit <think> anyway!
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': content})}\n\n"
+                            # Look for </think>
+                            end_think_idx = buffer.find("</think>")
+                            if end_think_idx != -1:
+                                is_thinking = False
+                                buffer = buffer[end_think_idx + 8:]
+                                continue
+                            
+                            # Check if we might be in the middle of writing </think>
+                            last_lt = buffer.rfind("<")
+                            if last_lt != -1:
+                                remainder = buffer[last_lt:]
+                                if "</think>".startswith(remainder):
+                                    # Keep it in buffer, wait for more chunks
+                                    buffer = remainder
+                                    break
+                            
+                            # Safely discard everything in the buffer (since we are thinking)
+                            buffer = ""
+                            break
+            
+            # Flush any remaining buffer if we weren't thinking
+            if buffer and not is_thinking:
+                if buffer != "<": # edge case
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': buffer})}\n\n"
 
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
