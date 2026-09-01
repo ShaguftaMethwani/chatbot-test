@@ -4,6 +4,7 @@ FastAPI routes for chat and health endpoints.
 import logging
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from backend.api.models import ChatRequest, ChatResponse, HealthResponse
 from backend.core.generator import get_generator
 from backend.vectorstore.store import get_store
@@ -12,20 +13,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.post("/api/chat", response_model=ChatResponse)
+@router.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     """
-    Receives user query, runs guardrails and RAG pipeline, and returns the response.
+    Receives user query, runs guardrails and RAG pipeline, and returns a streaming response.
     """
     try:
         generator = get_generator()
-        result = generator.generate_response(request.message)
-        
-        return ChatResponse(
-            answer=result["answer"],
-            source=result["source"],
-            last_updated=result["last_updated"],
-            refused=result["refused"]
+        return StreamingResponse(
+            generator.generate_stream(request.message),
+            media_type="text/event-stream"
         )
     except Exception as e:
         # Log the internal error but never expose details to the client

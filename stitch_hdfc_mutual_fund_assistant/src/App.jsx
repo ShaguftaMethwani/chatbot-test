@@ -30,6 +30,18 @@ function App() {
     setIsLoading(true);
 
     try {
+      // Add an initial empty bot message
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          content: '',
+          source: null,
+          lastUpdated: null,
+          refused: false,
+        },
+      ]);
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -40,22 +52,54 @@ function App() {
         throw new Error('API request failed');
       }
 
-      const data = await response.json();
+      setIsLoading(false); // Stop loading indicator because stream is starting
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
       
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'bot',
-          content: data.answer,
-          source: data.source,
-          lastUpdated: data.last_updated,
-          refused: data.refused,
-        },
-      ]);
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        
+        if (value) {
+          const chunkStr = decoder.decode(value, { stream: true });
+          const lines = chunkStr.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.replace('data: ', '').trim();
+              if (!dataStr) continue;
+              
+              try {
+                const data = JSON.parse(dataStr);
+                
+                setMessages((prev) => {
+                  const newMsgs = [...prev];
+                  const lastMsgIndex = newMsgs.length - 1;
+                  const lastMsg = { ...newMsgs[lastMsgIndex] };
+                  
+                  if (data.type === 'chunk') {
+                    lastMsg.content += data.text;
+                  } else if (data.type === 'metadata') {
+                    lastMsg.source = data.source;
+                    lastMsg.lastUpdated = data.last_updated;
+                    lastMsg.refused = data.refused;
+                  }
+                  
+                  newMsgs[lastMsgIndex] = lastMsg;
+                  return newMsgs;
+                });
+              } catch (e) {
+                console.error("Error parsing SSE JSON:", e, dataStr);
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Chat error:', error);
       showToast('Failed to connect to API.');
-    } finally {
       setIsLoading(false);
     }
   };
