@@ -9,7 +9,7 @@ from typing import Optional
 from groq import Groq
 from backend.config.settings import get_settings
 from backend.config.prompts import (
-    SYSTEM_PROMPT,
+    SYSTEM_PROMPT_TEMPLATE,
     USER_PROMPT_TEMPLATE,
     REFUSAL_ADVISORY,
     REFUSAL_OUT_OF_SCOPE,
@@ -17,6 +17,7 @@ from backend.config.prompts import (
     SCHEME_ALIASES,
 )
 from backend.core.query import preprocess_query
+from backend.core.query_splitter import split_questions
 from backend.core.guardrails import check_query
 from backend.vectorstore.store import get_store
 
@@ -78,9 +79,10 @@ class ResponseGenerator:
     def generate_response(self, user_query: str) -> dict:
         """
         Orchestrates the entire RAG pipeline for a given user query.
+        Supports multiple questions in a single message.
         Returns a dict containing 'answer', 'source', 'last_updated', and 'refused'.
         """
-        # 1-3. Guardrails (PII, Injection, Advisory)
+        # 1. Guardrails (PII, Injection, Advisory)
         is_allowed, refusal_response = check_query(user_query)
         if not is_allowed:
             logger.info("Query blocked by guardrails.")
@@ -91,48 +93,46 @@ class ResponseGenerator:
                 "refused": True
             }
 
-        # 3. Preprocess Query
-        processed_query = preprocess_query(user_query)
-        logger.debug(f"Processed query: {processed_query}")
+        # 2. Split into sub-questions using LLM decomposition
+        sub_questions = split_questions(user_query, client=self.client)
+        num_questions = len(sub_questions)
+        logger.info("Processing %d sub-question(s)", num_questions)
 
-        # 4. Retrieve Context from Vector Store
+        # 3. Retrieve context for each sub-question independently
+        all_valid_docs = []
+        all_valid_metas = []
+        seen_docs = set()  # Deduplicate by document text
+
         try:
-            # Attempt metadata-filtered retrieval if a scheme is identified
-            scheme_name = _resolve_scheme_from_query(user_query)
-            where_filter = {"scheme_name": scheme_name} if scheme_name else None
+            for sq in sub_questions:
+                processed_query = preprocess_query(sq)
+                logger.debug("Processed sub-query: %s", processed_query)
 
-            results = self.store.query(
-                [processed_query],
-                where=where_filter,
-            )
-            
-            # Extract documents, distances, and metadatas
-            documents = results.get('documents', [[]])[0]
-            metadatas = results.get('metadatas', [[]])[0]
-            distances = results.get('distances', [[]])[0]
-            
-            logger.info(
-                "Retrieved %d docs (scheme_filter=%s) with distances: %s",
-                len(documents), scheme_name, distances,
-            )
-            
-            if not documents:
-                raise ValueError("No documents returned from vector store.")
-                
-            # Filter out chunks that are too far away using the configured
-            # similarity threshold (converted to distance).
-            valid_docs = []
-            valid_metas = []
-            for doc, meta, dist in zip(documents, metadatas, distances):
-                if dist < self._max_distance:
-                    valid_docs.append(doc)
-                    valid_metas.append(meta)
-            
-            if not valid_docs:
-                logger.info(
-                    "All chunks below similarity threshold (max_dist=%.2f, best_dist=%.4f)",
-                    self._max_distance, min(distances) if distances else float('inf'),
+                scheme_name = _resolve_scheme_from_query(sq)
+                where_filter = {"scheme_name": scheme_name} if scheme_name else None
+
+                results = self.store.query(
+                    [processed_query],
+                    where=where_filter,
                 )
+
+                documents = results.get('documents', [[]])[0]
+                metadatas = results.get('metadatas', [[]])[0]
+                distances = results.get('distances', [[]])[0]
+
+                logger.info(
+                    "Sub-query '%s': retrieved %d docs (scheme_filter=%s) with distances: %s",
+                    sq[:50], len(documents), scheme_name, distances,
+                )
+
+                for doc, meta, dist in zip(documents, metadatas, distances):
+                    if dist < self._max_distance and doc not in seen_docs:
+                        all_valid_docs.append(doc)
+                        all_valid_metas.append(meta)
+                        seen_docs.add(doc)
+
+            if not all_valid_docs:
+                logger.info("No valid chunks found for any sub-question.")
                 return {
                     "answer": REFUSAL_OUT_OF_SCOPE,
                     "source": None,
@@ -149,22 +149,26 @@ class ResponseGenerator:
                 "refused": True
             }
 
-        # 5. Construct Prompt
-        context_text = "\n".join([f"- {doc}" for doc in valid_docs])
-        sources_list = list(set([meta.get('source_url', 'Unknown') for meta in valid_metas]))
+        # 4. Construct Prompt with merged context
+        context_text = "\n".join([f"- {doc}" for doc in all_valid_docs])
+        sources_list = list(set([meta.get('source_url', 'Unknown') for meta in all_valid_metas]))
         sources_text = "\n".join([f"- {url}" for url in sources_list])
-        
+
         user_prompt = USER_PROMPT_TEMPLATE.format(
             context=context_text,
             sources=sources_text,
             query=user_query
         )
 
-        # 6. Call Groq API
+        # Dynamic sentence limit: 3 sentences per sub-question
+        max_sentences = 3 * num_questions
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(max_sentences=max_sentences)
+
+        # 5. Call Groq API
         try:
             chat_completion = self.client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 model=self.settings.groq_model,
@@ -182,25 +186,25 @@ class ResponseGenerator:
                 "refused": True
             }
 
-        # 7. Post-process response
+        # 6. Post-process response
         raw_answer = answer
         logger.info(f"RAW LLM OUTPUT: {raw_answer}")
-        
+
         # Strip <think> blocks that reasoning models might generate, even if unclosed
         clean_answer = re.sub(r'<think>.*?(?:</think>|$)', '', answer, flags=re.DOTALL).strip()
-        
+
         # If the think block consumed all tokens and left no answer, use a fallback
         if not clean_answer:
             clean_answer = "I apologize, but I couldn't complete my response. Please try again."
-            
+
         answer = clean_answer
 
         # Strip common AI disclaimers
         answer = _strip_ai_disclaimers(answer)
 
-        # Truncate to ≤ 3 sentences as required by the design spec
-        answer = _truncate_to_sentences(answer, max_sentences=3)
-            
+        # Truncate using the dynamic sentence limit
+        answer = _truncate_to_sentences(answer, max_sentences=max_sentences)
+
         # If the LLM indicates it doesn't know, convert to out-of-scope refusal
         answer_lower = answer.lower()
         for pattern in _NO_INFO_PATTERNS:
@@ -213,8 +217,8 @@ class ResponseGenerator:
                 }
 
         # Determine the primary source and last updated date from the first valid chunk
-        primary_source = valid_metas[0].get("source_url")
-        scraped_date = valid_metas[0].get("scraped_date")
+        primary_source = all_valid_metas[0].get("source_url")
+        scraped_date = all_valid_metas[0].get("scraped_date")
 
         # Note: we do NOT append a "Last updated" footer to the answer text.
         # The frontend renders source and last_updated as separate structured
